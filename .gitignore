@@ -1,0 +1,5 @@
+node_modules/
+chroma_db/
+.gemini/tmp/
+*.skill
+.DS_Store

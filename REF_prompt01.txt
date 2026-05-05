@@ -1,0 +1,4 @@
+create wiki link like obsidian can zoom can pan , can shake node .  this from all MD on folder note , create test
+   data for this test about 10 file md  have function to reload , this be as standalone web app with also have menu ui
+   cli to select task todo include start stop server and view status  , open browser , show info . and summaray nad
+   show near node cluster

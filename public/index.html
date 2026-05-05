@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wiki Link Graph</title>
+    <script src="https://unpkg.com/force-graph"></script>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --text-color: #fff;
+            --panel-bg: rgba(0,0,0,0.7);
+            --btn-bg: #444;
+            --wiki-link: rgba(255,255,255,0.6);
+            --sim-link: rgba(100,200,255,0.4);
+        }
+        body.light-theme {
+            --bg-color: #f0f0f0;
+            --text-color: #333;
+            --panel-bg: rgba(255,255,255,0.8);
+            --btn-bg: #ccc;
+            --wiki-link: rgba(0,0,0,0.5);
+            --sim-link: rgba(0,100,255,0.4);
+        }
+        body { margin: 0; background: var(--bg-color); color: var(--text-color); font-family: sans-serif; overflow: hidden; transition: background 0.3s; }
+        #graph { width: 100vw; height: 100vh; }
+        #controls { position: absolute; top: 10px; left: 10px; z-index: 100; background: var(--panel-bg); padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        #info { position: absolute; bottom: 10px; right: 10px; z-index: 100; background: var(--panel-bg); padding: 15px; border-radius: 8px; max-width: 300px; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        button { background: var(--btn-bg); color: var(--text-color); border: 1px solid #666; padding: 6px 12px; cursor: pointer; border-radius: 4px; margin-right: 5px; margin-bottom: 5px; }
+        button:hover { filter: brightness(1.2); }
+        h3 { margin-top: 0; border-bottom: 1px solid #555; padding-bottom: 5px; }
+        .control-group { margin-top: 10px; display: flex; align-items: center; gap: 8px; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <button id="btn-reload">Reload Graph</button>
+        <button id="btn-shake">Shake Nodes</button>
+        <button id="btn-theme">Toggle Light Mode</button>
+        
+        <div class="control-group">
+            <input type="checkbox" id="check-labels">
+            <label for="check-labels">Always Show Labels</label>
+        </div>
+        
+        <div style="margin-top: 10px; font-size: 11px; color: #888;">Scroll: Zoom | Drag: Pan | Click: Info</div>
+    </div>
+    <div id="info">
+        <h3 id="node-name">Node Name</h3>
+        <div id="node-content">
+            <p id="node-summary"></p>
+            <div id="node-neighbors"></div>
+        </div>
+    </div>
+    <div id="graph"></div>
+
+    <script>
+        let Graph;
+        let isLightTheme = false;
+        let showLabels = false;
+        let currentData = { nodes: [], links: [] };
+
+        async function fetchGraphData() {
+            const response = await fetch('/api/graph');
+            return await response.json();
+        }
+
+        async function initGraph() {
+            currentData = await fetchGraphData();
+            
+            Graph = ForceGraph()(document.getElementById('graph'))
+                .graphData(currentData)
+                .nodeId('id')
+                .nodeLabel('name')
+                .nodeAutoColorBy('id')
+                // Node Text Canvas Drawing
+                .nodeCanvasObject((node, ctx, globalScale) => {
+                    const label = node.name;
+                    const fontSize = 12 / globalScale;
+                    ctx.font = `${fontSize}px Sans-Serif`;
+                    
+                    // Draw Circle
+                    ctx.beginPath();
+                    ctx.arc(node.x, node.y, 5, 0, 2 * Math.PI, false);
+                    ctx.fillStyle = node.color;
+                    ctx.fill();
+
+                    // Draw Text if enabled or zoomed in
+                    if (showLabels || globalScale > 1.5) {
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillStyle = isLightTheme ? '#333' : '#eee';
+                        ctx.fillText(label, node.x, node.y + 8);
+                    }
+                })
+                .linkDirectionalArrowLength(d => d.type === 'wiki' ? 6 : 0)
+                .linkDirectionalArrowRelPos(1)
+                .linkWidth(d => d.type === 'wiki' ? 2 : 1)
+                .linkColor(d => {
+                    const wikiColor = isLightTheme ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.5)';
+                    const simColor = isLightTheme ? 'rgba(0,100,255,0.3)' : 'rgba(100,200,255,0.3)';
+                    return d.type === 'wiki' ? wikiColor : simColor;
+                })
+                .linkDashArray(d => d.type === 'similarity' ? [3, 2] : null)
+                .onNodeClick(node => showInfo(node))
+                .onBackgroundClick(() => {
+                    document.getElementById('info').style.display = 'none';
+                });
+
+            updatePhysics();
+        }
+
+        function updatePhysics() {
+            Graph.d3Force('link').distance(d => d.type === 'wiki' ? 60 : 180);
+            Graph.d3Force('charge').strength(-180);
+        }
+
+        function showInfo(node) {
+            const infoDiv = document.getElementById('info');
+            document.getElementById('node-name').innerText = node.name;
+            
+            const neighbors = currentData.links
+                .filter(l => l.source.id === node.id || l.target.id === node.id || l.source === node.id || l.target === node.id)
+                .map(l => {
+                    const targetId = (l.source.id === node.id || l.source === node.id) ? (l.target.id || l.target) : (l.source.id || l.source);
+                    return targetId;
+                });
+            
+            const nearCluster = currentData.nodes
+                .filter(n => n.id !== node.id && n.keywords && n.keywords.some(kw => node.keywords && node.keywords.includes(kw)))
+                .map(n => n.id);
+
+            const summaryHtml = `
+                <p style="font-size: 14px;"><strong>Summary:</strong> ${node.summary || 'N/A'}</p>
+                <p style="font-size: 12px; color: #888;"><strong>Keywords:</strong> ${(node.keywords || []).join(', ')}</p>
+                <hr style="border: 0; border-top: 1px solid #555;">
+                <div style="font-size: 13px;">
+                    <strong>Connections:</strong> ${neighbors.length ? neighbors.join(', ') : 'None'}<br>
+                    <strong>Cluster Nodes:</strong> ${nearCluster.length ? nearCluster.join(', ') : 'None'}
+                </div>
+            `;
+            
+            document.getElementById('node-summary').innerHTML = summaryHtml;
+            infoDiv.style.display = 'block';
+            
+            Graph.centerAt(node.x, node.y, 1000);
+            Graph.zoom(2.5, 1000);
+        }
+
+        // --- Event Listeners ---
+        
+        document.getElementById('btn-reload').addEventListener('click', () => {
+            fetchGraphData().then(data => {
+                currentData = data;
+                Graph.graphData(data);
+                console.log('Graph Reloaded');
+            });
+        });
+
+        document.getElementById('btn-shake').addEventListener('click', () => {
+            Graph.d3ReheatSimulation();
+            console.log('Simulation Reheated');
+        });
+
+        document.getElementById('btn-theme').addEventListener('click', () => {
+            isLightTheme = !isLightTheme;
+            document.body.classList.toggle('light-theme');
+            document.getElementById('btn-theme').innerText = isLightTheme ? 'Toggle Dark Mode' : 'Toggle Light Mode';
+            Graph.linkColor(Graph.linkColor()); // Refresh link colors
+        });
+
+        document.getElementById('check-labels').addEventListener('change', (e) => {
+            showLabels = e.target.checked;
+            Graph.nodeCanvasObject(Graph.nodeCanvasObject()); // Trigger redraw
+        });
+
+        initGraph();
+    </script>
+</body>
+</html>
