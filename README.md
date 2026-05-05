@@ -29,6 +29,9 @@ As the coder, I found this project to be an excellent exercise in **hybrid data 
 ### Node Information & Clusters
 ![Node Info View](screenshot3_info.png)
 
+### Custom Note Clusters (a01, a02, a03)
+![Custom Cluster](screenshot_abc.png)
+
 ---
 
 ## 🚀 Quickstart
