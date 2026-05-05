@@ -18,8 +18,16 @@ As the coder, I found this project to be an excellent exercise in **hybrid data 
 
 ---
 
-## 📸 Application Screenshot
-![Application Interface](screenshot.png)
+## 📸 Application Screenshots
+
+### Dark Mode (Default)
+![Dark Mode Graph](screenshot1_dark.png)
+
+### Light Mode
+![Light Mode Graph](screenshot2_light.png)
+
+### Node Information & Clusters
+![Node Info View](screenshot3_info.png)
 
 ---
 
